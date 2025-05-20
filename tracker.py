@@ -63,32 +63,16 @@ class IoUTracker:
         self.tracks = []
         self.next_id = 0
 
-    @staticmethod
-    def _resolve_conflicts(detections):
-        if not detections:
-            return []
-        label_map = {}
-        for idx, det in enumerate(detections):
-            label_map.setdefault(det["label"], []).append(idx)
-        keep = set()
-        for pos, neg in EPP_PAIRS:
-            if neg in label_map:
-                best_idx = max(label_map[neg], key=lambda i: detections[i]["conf"])
-                keep.add(best_idx)
-            elif pos in label_map:
-                best_idx = max(label_map[pos], key=lambda i: detections[i]["conf"])
-                keep.add(best_idx)
-        if "Person" in label_map:
-            keep.update(label_map["Person"])
-        return [detections[i] for i in sorted(keep)]
-
     def update(self, detections):
-        detections = self._resolve_conflicts(detections)
+        persons = [d for d in detections if d["label"] == "Person"]
+        others = [d for d in detections if d["label"] != "Person"]
+
+        # Tracking solo de personas
         matches, used = {}, set()
         for track in self.tracks:
             best_iou = 0.0
             best_det = None
-            for idx, det in enumerate(detections):
+            for idx, det in enumerate(persons):
                 if idx in used:
                     continue
                 score = iou(track.bbox, det["bbox"])
@@ -97,50 +81,48 @@ class IoUTracker:
             if best_iou >= self.iou_thresh:
                 matches[track.id] = best_det
                 used.add(best_det)
-                track.bbox = detections[best_det]["bbox"]
+                track.bbox = persons[best_det]["bbox"]
                 track.lost = 0
             else:
                 track.lost += 1
+
         self.tracks = [t for t in self.tracks if t.lost <= self.max_lost]
-        for idx, det in enumerate(detections):
+        for idx, det in enumerate(persons):
             if idx not in used:
                 self.tracks.append(Track(self.next_id, det["bbox"]))
                 matches[self.next_id] = idx
                 self.next_id += 1
+
         for tid, d_idx in matches.items():
-            detections[d_idx]["track_id"] = tid
-        return detections
+            persons[d_idx]["track_id"] = tid
 
-# ----------------------------------------------------------------------------
-# Tracker con StrongSORT (opcional)
-# ----------------------------------------------------------------------------
+        # Asociar objetos (helmet, etc.) a personas por IoU
+        final_dets = persons.copy()
+        for obj in others:
+            ox1, oy1, ox2, oy2 = obj["bbox"]
+            ocx, ocy = (ox1 + ox2) // 2, (oy1 + oy2) // 2
 
-class StrongSORTTracker:
-    def __init__(self, reid_weights_path: str = "osnet_x0_25_market1501.pt", device="cuda"):
-        if not STRONGSORT_AVAILABLE:
-            raise ImportError("StrongSORT no está disponible. Instálalo con: pip install strongsort")
-        self.tracker = StrongSORT(
-            model_weights=Path(reid_weights_path),
-            device=device,
-            fp16=True
-        )
+            best_tid = None
+            best_iou = 0.0
+            for p in persons:
+                if "track_id" not in p:
+                    continue
+                px1, py1, px2, py2 = p["bbox"]
+                margin = 40
 
-    def update(self, detections, frame):
-        dets = []
-        for det in detections:
-            if "bbox" in det and "conf" in det:
-                x1, y1, x2, y2 = det["bbox"]
-                dets.append([x1, y1, x2, y2, det["conf"]])
-        outputs = self.tracker.update(dets, frame)
-        tracked = []
-        for i, obj in enumerate(outputs):
-            x1, y1, x2, y2, track_id = obj
-            if i < len(detections):
-                det = detections[i].copy()
-                det["bbox"] = (x1, y1, x2, y2)
-                det["track_id"] = track_id
-                tracked.append(det)
-        return tracked
+                if not (px1 - margin <= ocx <= px2 + margin and py1 - margin <= ocy <= py2 + margin):
+                    continue
+
+                score = iou(p["bbox"], obj["bbox"])
+                if score > best_iou:
+                    best_iou = score
+                    best_tid = p["track_id"]
+
+            if best_tid is not None and best_iou > 0.07:
+                obj["track_id"] = best_tid
+                final_dets.append(obj)
+
+        return final_dets
 
 # ----------------------------------------------------------------------------
 # Dibujo + EPP por persona
@@ -151,7 +133,7 @@ def draw_tracked(frame, tracked_dets):
         x1, y1, x2, y2 = det["bbox"]
         label = det["label"]
         conf = det["conf"]
-        tid = det["track_id"]
+        tid = det.get("track_id", -1)
         if label.startswith("no-"):
             color = (0, 0, 255)
         elif label == "Person":
@@ -171,39 +153,35 @@ def draw_tracked(frame, tracked_dets):
     return frame
 
 # ----------------------------------------------------------------------------
-# Generador de texto resumen para panel Tkinter
+# Resumen sin ID visibles
 # ----------------------------------------------------------------------------
 
 def summarize_persons(tracked_dets):
-    summary = {}
+    personas = {}
     for det in tracked_dets:
         tid = det.get("track_id")
-        label = det.get("label")
-        conf = det.get("conf")
-        if tid is None:
+        label = det["label"]
+        conf = det["conf"]
+        if tid is None or label == "Person":
             continue
-        if tid not in summary:
-            summary[tid] = {
+        if tid not in personas:
+            personas[tid] = {
                 "helmet": None, "no-helmet": None,
                 "goggles": None, "no-goggles": None,
                 "vest": None, "no-vest": None
             }
-        if label in summary[tid]:
-            summary[tid][label] = conf
-
-    # Formatear salida legible
-    report = [f"Detectadas: {len(summary)} persona(s)\n"]
-    for tid, items in summary.items():
-        report.append(f"Person {tid}:")
-        for pair in EPP_PAIRS:
-            pos, neg = pair
-            conf_pos = items[pos]
-            conf_neg = items[neg]
-            if conf_neg is not None:
-                report.append(f"  {neg}: {conf_neg:.2f}")
-            elif conf_pos is not None:
-                report.append(f"  {pos}: {conf_pos:.2f}")
+        if label in personas[tid]:
+            personas[tid][label] = conf
+    
+    output = [f"Detectadas: {len(personas)} persona(s)\n"]
+    for idx, (_, estado) in enumerate(personas.items(), 1):
+        output.append(f"Persona {idx}:")
+        for pos, neg in EPP_PAIRS:
+            if estado[neg] is not None:
+                output.append(f"  {neg}: {estado[neg]:.2f}")
+            elif estado[pos] is not None:
+                output.append(f"  {pos}: {estado[pos]:.2f}")
             else:
-                report.append(f"  {pos}: no detectado")
-        report.append("")
-    return "\n".join(report)
+                output.append(f"  {pos}: no detectado")
+        output.append("")
+    return "\n".join(output)

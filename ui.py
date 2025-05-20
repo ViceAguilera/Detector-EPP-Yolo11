@@ -47,32 +47,12 @@ class AppUI:
         img = Image.fromarray(img)
         self._photo = ImageTk.PhotoImage(image=img)
         self.image_label.configure(image=self._photo)
-        self.image_label.image = self._photo  # previene garbage collection
+        self.image_label.image = self._photo
 
-    def update_tracks(self, tracks):
-        """Actualiza la lista de tracks activos en formato resumen completo."""
+    def update_tracks(self, resumen: str):
         self.listbox.delete(0, tk.END)
-        personas = {}
-        for det in tracks:
-            tid = det['track_id']
-            label = det['label']
-            conf = det['conf']
-            if tid not in personas:
-                personas[tid] = {}
-            personas[tid][label] = conf
-
-        self.listbox.insert(tk.END, f"Total detectadas: {len(personas)} persona(s)")
-        for tid, items in personas.items():
-            self.listbox.insert(tk.END, f"\nPersona {tid}:")
-            for base in ["helmet", "goggles", "vest"]:
-                pos = items.get(base)
-                neg = items.get(f"no-{base}")
-                if neg is not None:
-                    self.listbox.insert(tk.END, f"  no-{base}: {neg:.2f}")
-                elif pos is not None:
-                    self.listbox.insert(tk.END, f"  {base}: {pos:.2f}")
-                else:
-                    self.listbox.insert(tk.END, f"  {base}: no detectado")
+        for line in resumen.split('\n'):
+            self.listbox.insert(tk.END, line)
 
     def run(self):
         """Arranca el bucle principal de Tkinter."""

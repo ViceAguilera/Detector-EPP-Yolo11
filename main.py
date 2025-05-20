@@ -6,7 +6,7 @@ import threading
 import cv2
 from pathlib import Path
 from ui import AppUI
-from tracker import IoUTracker, load_model, draw_tracked
+from tracker import IoUTracker, load_model, draw_tracked, summarize_persons
 
 
 def main(app: AppUI, source: str):
@@ -39,11 +39,13 @@ def main(app: AppUI, source: str):
 
         # Tracking
         tracked = tracker.update(detections)
-
         annotated = draw_tracked(frame.copy(), tracked)
+        
         # Actualizar interfaz
         app.update_frame(annotated)
-        app.update_tracks(tracked)
+        resumen = summarize_persons(tracked)
+        app.update_tracks(resumen)
+
 
     cap.release()
 
