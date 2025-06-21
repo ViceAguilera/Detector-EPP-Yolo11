@@ -6,7 +6,7 @@ import threading
 import cv2
 from pathlib import Path
 from ui import AppUI
-from tracker import IoUTracker, load_model, draw_tracked, summarize_persons
+from tracker import ByteTrackWrapper, load_model, draw_tracked, summarize_persons
 
 
 def main(app: AppUI, source: str):
@@ -17,7 +17,7 @@ def main(app: AppUI, source: str):
         return
 
     model = load_model(Path(__file__).parent / 'model' / 'best.pt')
-    tracker = IoUTracker(iou_thresh=0.3, max_lost=5)
+    tracker = ByteTrackWrapper(frame_rate=30, track_thresh=0.5)
 
     while True:
         ret, frame = cap.read()
@@ -37,8 +37,8 @@ def main(app: AppUI, source: str):
             label = model.names[cls]
             detections.append({'bbox':(x1,y1,x2,y2),'label':label,'conf':conf})
 
-        # Tracking
-        tracked = tracker.update(detections)
+        # Tracking con ByteTrack
+        tracked = tracker.update(detections, frame)
         annotated = draw_tracked(frame.copy(), tracked)
         
         # Actualizar interfaz

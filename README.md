@@ -10,6 +10,7 @@ _Sistema de detección de EPP en tiempo real utilizando YOLOv11 y OpenCV._
 - [Python v3.9](https://www.python.org/) - Lenguaje de programación
 - [OpenCV](https://opencv.org/) - Librería de visión artificial
 - [Ultralytics](https://ultralytics.com/) - Librería de modelo de detección de objetos YOLOv11
+- [ByteTracker](https://github.com/cj-mills/cjm-byte-track) - Sistema de seguimiento multi-objeto para tracking en tiempo real
 
 ## Comenzando 🚀
 
