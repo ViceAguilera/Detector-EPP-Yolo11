@@ -26,23 +26,11 @@ class AppUI:
         self.listbox = tk.Listbox(sidebar, width=40, font=("Courier New", 9))
         self.listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Botón para pausar/reanudar
-        self.btn_pause = tk.Button(sidebar, text="Pausar", command=self.toggle_pause)
-        self.btn_pause.pack(fill=tk.X, padx=5, pady=(0,10))
-
         self.paused = False
         self.photo = None
         self._img_id = None
 
-    def toggle_pause(self):
-        """Alterna el estado de pausa."""
-        self.paused = not self.paused
-        self.btn_pause.config(text="Reanudar" if self.paused else "Pausar")
-
     def update_frame(self, frame):
-        if self.paused:
-            return
-
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(img)
         self._photo = ImageTk.PhotoImage(image=img)
