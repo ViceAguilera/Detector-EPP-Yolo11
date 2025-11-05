@@ -65,9 +65,17 @@ def _region_from_person(person_bbox, frac_y1, frac_y2):
 class ByteTrackWrapper:
     """Tracker usando ByteTrack para detección de personas."""
     def __init__(self, frame_rate: int = 30, track_thresh: float = 0.5):
-        if not BYTETRACK_AVAILABLE:
-            raise ImportError("BYTETracker no disponible. Instálalo con: pip install cjm_byte_track")
-        self.tracker = BYTETracker(frame_rate=frame_rate, track_thresh=track_thresh)
+        self._frame_rate = frame_rate
+        self._track_thresh = track_thresh
+        self._fallback = not BYTETRACK_AVAILABLE
+
+        if self._fallback:
+            print("Aviso: BYTETracker no disponible. Se usará un seguimiento básico por IoU.")
+            self._prev_fallback_tracks = []
+            self._next_track_id = 1
+            self.tracker = None
+        else:
+            self.tracker = BYTETracker(frame_rate=frame_rate, track_thresh=track_thresh)
 
     def update(self, detections, frame):
         """
@@ -81,14 +89,20 @@ class ByteTrackWrapper:
         # Filtrar SOLO personas (case-insensitive)
         person_dets = [d for d in detections if str(d.get('label', '')).lower() == 'person']
 
-        # Avanzar tracker aunque no haya detecciones (para que caduquen tracks)
+        # Si no hay detecciones, avanzar tracker o limpiar fallback
         if not person_dets:
+            if self._fallback:
+                self._prev_fallback_tracks = []
+                return []
             _ = self.tracker.update(
                 output_results=np.zeros((0, 5), dtype=np.float32),
                 img_info=(img_h, img_w),   # (alto, ancho)
                 img_size=(img_h, img_w)    # (alto, ancho)
             )
             return []
+
+        if self._fallback:
+            return self._update_fallback(person_dets)
 
         # Convertir a formato requerido por BYTETracker: [x1,y1,x2,y2,score]
         dets_array = np.array(
@@ -131,6 +145,41 @@ class ByteTrackWrapper:
                 'track_id': tid
             })
         return tracked
+
+    def _update_fallback(self, person_dets):
+        """Seguimiento básico por IoU cuando ByteTrack no está disponible."""
+        matched_prev = set()
+        new_tracks = []
+
+        for det in person_dets:
+            bbox = det['bbox']
+            best_idx = -1
+            best_iou = 0.0
+
+            for idx, prev in enumerate(self._prev_fallback_tracks):
+                if idx in matched_prev:
+                    continue
+                iou = iou_xyxy(bbox, prev['bbox'])
+                if iou > best_iou:
+                    best_iou = iou
+                    best_idx = idx
+
+            if best_idx >= 0 and best_iou >= 0.3:
+                track_id = self._prev_fallback_tracks[best_idx]['track_id']
+                matched_prev.add(best_idx)
+            else:
+                track_id = self._next_track_id
+                self._next_track_id += 1
+
+            new_tracks.append({
+                'bbox': bbox,
+                'label': 'Person',
+                'conf': float(det.get('conf', 0.0)),
+                'track_id': track_id,
+            })
+
+        self._prev_fallback_tracks = new_tracks
+        return new_tracks
 
 # ----------------------------------------------------------------------------
 # Dibujo (personas + PPE)
@@ -184,7 +233,8 @@ _PPE_REGIONS = {
 _MIN_PERSON_H   = 80       # px
 _IOU_MIN        = 0.10     # IoU mínimo PPE↔persona
 _CONTAIN_THRESH = 0.30     # % del área PPE dentro de la región anatómica
-_CLASS_THRESH   = {        # conf mínima por clase PPE
+MIN_CONF_THRESH = {        # conf mínima por clase detectada
+    'person':  0.50,
     'helmet':  0.45,
     'goggles': 0.30,
     'vest':    0.40,
@@ -206,32 +256,37 @@ def summarize_persons_iou(tracked_persons, all_dets):
 
     lines = [f"Detectadas: {len(tracked_persons)} persona(s)\n"]
 
-    for idx, person in enumerate(tracked_persons, start=1):
+    # Pre-calcular contexto por persona (tamaño y regiones)
+    person_ctx = []
+    for person in tracked_persons:
         pid = int(person.get('track_id', -1))
         px1, py1, px2, py2 = person['bbox']
         ph = max(1, py2 - py1)
-        lines.append(f"Persona {idx} (ID {pid}):")
+        small = ph < _MIN_PERSON_H
+        regions = {
+            k: _region_from_person(person['bbox'], *_PPE_REGIONS[k]) for k in ppe_by_type.keys()
+        } if not small else {}
+        person_ctx.append({
+            'track_id': pid,
+            'bbox': person['bbox'],
+            'small': small,
+            'regions': regions,
+        })
 
-        # Si la persona es muy pequeña, evitamos evaluar PPE
-        if ph < _MIN_PERSON_H:
-            lines.append("  helmet: no evaluado (persona pequeña)")
-            lines.append("  goggles: no evaluado (persona pequeña)")
-            lines.append("  vest: no evaluado (persona pequeña)")
-            lines.append("")
+    # Para cada clase PPE, seleccionar detecciones únicas por persona (greedy por score)
+    class_assignments = {cls: [None] * len(person_ctx) for cls in ppe_by_type.keys()}
+    for cls in ('helmet', 'vest', 'goggles'):
+        detections = ppe_by_type[cls]
+        if not detections:
             continue
-
-        # Regiones anatómicas
-        regions = {k: _region_from_person(person['bbox'], *_PPE_REGIONS[k]) for k in ppe_by_type.keys()}
-
-        # Por cada PPE, escoger el mejor candidato
-        for cls in ('helmet', 'vest', 'goggles'):
-            best_score = -1.0
-            best_conf = 0.0
-            region = regions[cls]
-
-            for epp in ppe_by_type[cls]:
+        candidates = []
+        for p_idx, ctx in enumerate(person_ctx):
+            if ctx['small']:
+                continue
+            region = ctx['regions'][cls]
+            for d_idx, epp in enumerate(detections):
                 eb = epp['bbox']
-                iou = iou_xyxy(eb, person['bbox'])
+                iou = iou_xyxy(eb, ctx['bbox'])
                 if iou < _IOU_MIN:
                     continue
 
@@ -241,13 +296,36 @@ def summarize_persons_iou(tracked_persons, all_dets):
                     continue
 
                 # ranking: contención (70%), IoU (20%), conf (10%)
-                score = contain_ratio * 0.7 + iou * 0.2 + float(epp['conf']) * 0.1
-                if score > best_score:
-                    best_score = score
-                    best_conf = float(epp['conf'])
+                conf = float(epp['conf'])
+                score = contain_ratio * 0.7 + iou * 0.2 + conf * 0.1
+                candidates.append((score, conf, p_idx, d_idx))
 
-            if best_score >= 0 and best_conf >= _CLASS_THRESH[cls]:
-                lines.append(f"  {cls}: {best_conf:.2f}")
+        used_detections = set()
+        assigned_persons = set()
+        for score, conf, p_idx, d_idx in sorted(candidates, key=lambda x: x[0], reverse=True):
+            if d_idx in used_detections or p_idx in assigned_persons:
+                continue
+            if conf < MIN_CONF_THRESH[cls]:
+                continue
+            class_assignments[cls][p_idx] = conf
+            used_detections.add(d_idx)
+            assigned_persons.add(p_idx)
+
+    # Construir resumen legible
+    for idx, ctx in enumerate(person_ctx, start=1):
+        pid = ctx['track_id']
+        lines.append(f"Persona {idx} (ID {pid}):")
+
+        if ctx['small']:
+            lines.append("  helmet: no evaluado (persona pequeña)")
+            lines.append("  goggles: no evaluado (persona pequeña)")
+            lines.append("  vest: no evaluado (persona pequeña)")
+            lines.append("")
+            continue
+        for cls in ('helmet', 'vest', 'goggles'):
+            conf = class_assignments[cls][idx - 1]
+            if conf is not None:
+                lines.append(f"  {cls}: {conf:.2f}")
             else:
                 lines.append(f"  {cls}: no detectado")
 
