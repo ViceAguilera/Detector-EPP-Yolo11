@@ -1,121 +1,86 @@
-# Detector de EPP en tiempo real 
+# Detector de EPP en tiempo real
 
-###### **🚧 V1.0 Beta development.🚧🔨**
+Aplicación de escritorio que detecta elementos de protección personal (EPP) en video usando YOLOv11, con seguimiento de personas mediante ByteTrack.
 
-_Sistema de reconocimiento automático de matrículas vehiculares y API para el control de acceso en tiempo real_
-_Sistema de detección de EPP en tiempo real utilizando YOLOv11 y OpenCV._
+![Python](https://img.shields.io/badge/Python-3.9-3776AB?style=flat&logo=python&logoColor=white)
+![YOLOv11](https://img.shields.io/badge/YOLO-v11-00FFFF?style=flat)
+![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=flat&logo=opencv&logoColor=white)
+![Licencia](https://img.shields.io/badge/licencia-MIT-green?style=flat)
+![Último commit](https://img.shields.io/github/last-commit/ViceAguilera/Detector-EPP-Yolo11?style=flat)
 
-## Construido con 🛠️
+## Descripción
 
-- [Python v3.9](https://www.python.org/) - Lenguaje de programación
-- [OpenCV](https://opencv.org/) - Librería de visión artificial
-- [Ultralytics](https://ultralytics.com/) - Librería de modelo de detección de objetos YOLOv11
-- [ByteTracker](https://github.com/cj-mills/cjm-byte-track) - Sistema de seguimiento multi-objeto para tracking en tiempo real
+El programa procesa un video o un dispositivo de captura cuadro a cuadro, detecta personas y su equipamiento de seguridad con un modelo YOLOv11 entrenado a medida (`model/best.pt`) y asigna un identificador persistente a cada detección con ByteTrack. Una interfaz gráfica muestra el video anotado y un resumen por persona con los EPP detectados o ausentes. El proyecto se encuentra en desarrollo (versión beta).
 
-## Comenzando 🚀
+## Características
 
-### Instalacion  🔧
+- Detección con YOLOv11 (umbral de confianza 0.5).
+- Seguimiento multi-objeto con ByteTrack, con ID visible sobre cada detección.
+- Resumen por persona de los pares de EPP: `goggles`/`no-goggles`, `helmet`/`no-helmet` y `vest`/`no-vest`.
+- Asociación de cada EPP a la persona más cercana (umbral de 300 píxeles).
+- Interfaz Tkinter con panel de resumen y botón de pausa/reanudación.
+- Acepta un archivo de video o un dispositivo de captura como fuente.
 
-<details>
-   <summary>Linux</summary>
+## Tecnologías
 
-1. Se debe instalar venv
-    ```bash
-    sudo apt-get install python3.9-venv
-    ```
-  
-2. Se debe instalar un packete para OpenCV
-    ```bash
-    sudo apt-get update && apt-get install -y libgl1-mesa-glx
-    ```
+- Python 3.9
+- [Ultralytics](https://ultralytics.com/) (YOLOv11)
+- [OpenCV](https://opencv.org/)
+- [ByteTrack](https://github.com/cj-mills/cjm-byte-track) (`cjm_byte_track`)
+- Tkinter y Pillow para la interfaz
 
-3. Se clona el repositorio de GitHub
-    ```bash
-    git clone https://github.com/ViceAguilera/Detector-EPP-Yolo11.git
-    ```
-  
-4. Se ingresa a la carpeta del proyecto
-    ```bash
-    cd detector-epp
-    ```
-  
-5. Se crea un entorno virtual
-    ```bash
-    python3.9 -m venv venv
-    ```
-    
-6. Se activa el entorno virtual
-    ```bash
-    source venv/bin/activate
-    ```
+## Requisitos
 
-7. Se instala los requerimientos del proyecto
-    ```bash
-    pip install -r requirements.txt
-    ```
-   
-8. Se desinstala pytorch
-    ```bash
-    pip uninstall -y torch torchvision torchaudio
-    ```
+- Python 3.9
+- Dependencias de `requirements.txt` (`ultralytics`, `opencv-python`, `bytetracker`).
+- El código importa `cjm_byte_track`; si falta, el programa indica instalarlo con `pip install cjm_byte_track`.
+- Opcional: GPU NVIDIA con CUDA 11.8 para acelerar la inferencia.
 
-8. Se instala CUDA Pytorch
-    ```bash
-   pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-   ```
+## Instalación
 
-9. Se ejecuta el script
-    ```bash
-    python3.9 main.py
-    ```
-</details>
+```bash
+git clone https://github.com/ViceAguilera/Detector-EPP-Yolo11.git
+cd Detector-EPP-Yolo11
+python -m venv venv
+source venv/bin/activate        # En Windows: ./venv/Scripts/activate
+pip install -r requirements.txt
+```
 
-<details>
-  <summary>Windows</summary>
+En Linux, OpenCV puede requerir `sudo apt-get install -y libgl1-mesa-glx`.
 
-1. Se clona el repositorio de GitHub
-    ```bash
-    git clone https://github.com/ViceAguilera/Detector-EPP-Yolo11.git detector-epp
-    ```
-  
-2. Se ingresa a la carpeta del proyecto
-    ```bash
-    cd detector-epp
-    ```
-  
-3. Se crea un entorno virtual
-    ```bash
-    python -m venv venv
-    ```
-    
-4. Se activa el entorno virtual
-    ```bash
-    ./venv/Scripts/activate
-    ```
-   
-5. Se instala los requerimientos del proyecto
-    ```bash
-    pip install -r requirements.txt
-    ```
-6. Se desinstala pytorch
-    ```bash
-    pip uninstall -y torch torchvision torchaudio
-    ```
+Para usar PyTorch con CUDA 11.8:
 
-7. Se instala CUDA Pytorch
-    ```bash
-   pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-   ```
+```bash
+pip uninstall -y torch torchvision torchaudio
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
 
-8. Se ejecuta el script
-    ```bash
-    python3.9 main.py
-    ```
-</details>
-   
-## Licencia 📄
+## Uso
 
-Este proyecto está bajo el _GNU AFFERO GENERAL PUBLIC LICENSE_ - mira el archivo [LICENSE](LICENSE) para detalles
+```bash
+# Con el video de ejemplo incluido (epp.mp4)
+python main.py
 
-## Autor ✒️
-[**Vicente Aguilera Arias**](https://github.com/ViceAguilera)
+# Con otro video o dispositivo de captura
+python main.py ruta/al/video.mp4
+python main.py 0
+```
+
+## Estructura del proyecto
+
+```
+main.py            # Punto de entrada: captura, inferencia y actualización de la interfaz
+tracker.py         # Carga del modelo, ByteTrack, dibujo y resumen de EPP por persona
+ui.py              # Interfaz gráfica en Tkinter
+model/best.pt      # Pesos del modelo YOLOv11 entrenado
+epp.mp4            # Video de ejemplo
+requirements.txt   # Dependencias
+```
+
+## Licencia
+
+Distribuido bajo la licencia MIT. Ver [LICENSE](LICENSE).
+
+## Autor
+
+**Vicente Aguilera Arias** — [Portafolio](https://portfolio.iamsirius.cl) · [GitHub](https://github.com/ViceAguilera) · [LinkedIn](https://www.linkedin.com/in/vicenteaguilera/)
