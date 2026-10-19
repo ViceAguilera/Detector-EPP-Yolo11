@@ -5,12 +5,33 @@ Aplicación de escritorio que detecta elementos de protección personal (EPP) en
 ![Python](https://img.shields.io/badge/Python-3.9-3776AB?style=flat&logo=python&logoColor=white)
 ![YOLOv11](https://img.shields.io/badge/YOLO-v11-00FFFF?style=flat)
 ![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=flat&logo=opencv&logoColor=white)
-![Licencia](https://img.shields.io/badge/licencia-MIT-green?style=flat)
+![Estado](https://img.shields.io/badge/estado-activo-brightgreen?style=flat)
+![Licencia](https://img.shields.io/badge/licencia-MIT-blue?style=flat)
 ![Último commit](https://img.shields.io/github/last-commit/ViceAguilera/Detector-EPP-Yolo11?style=flat)
+
+<!-- Demo: agrega una captura o GIF en docs/demo.gif y descomenta la línea siguiente -->
+<!-- <p align="center"><img src="docs/demo.gif" alt="Demostración del detector de EPP" width="800"></p> -->
+
+## Tabla de contenidos
+
+- [Descripción](#descripción)
+- [Estado del proyecto](#estado-del-proyecto)
+- [Características](#características)
+- [Tecnologías](#tecnologías)
+- [Requisitos](#requisitos)
+- [Instalación](#instalación)
+- [Uso](#uso)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Licencia](#licencia)
+- [Autor](#autor)
 
 ## Descripción
 
 El programa procesa un video o un dispositivo de captura cuadro a cuadro, detecta personas y su equipamiento de seguridad con un modelo YOLOv11 entrenado a medida (`model/best.pt`) y asigna un identificador persistente a cada detección con ByteTrack. Una interfaz gráfica muestra el video anotado y un resumen por persona con los EPP detectados o ausentes. El proyecto se encuentra en desarrollo (versión beta).
+
+## Estado del proyecto
+
+**Activo.** El proyecto está en desarrollo (versión beta) y recibe cambios.
 
 ## Características
 
